@@ -2,7 +2,12 @@ name: barq-assessment
 x-app: &app
   build: .
   init: true
-  restart: "no"
+  restart: unless-stopped
+  deploy:
+    resources:
+      limits:
+        cpus: "0.50"
+        memory: 256M  
   env_file: ./config/app.env
   environment: &app-env
     APP_HOST: "0.0.0.0"
@@ -22,29 +27,41 @@ services:
     environment:
       POSTGRES_USER: barq_app
       POSTGRES_DB: barq_tasks
-      POSTGRES_PASSWORD: BarqLabOnly_7qN2vK8c
-    ports: ["127.0.0.1:15432:5432"]
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+# ports deleted
     volumes:
-      - postgres-data:/var/lib/postgresql/backup
+      - postgres-data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
-    tmpfs: [/var/lib/postgresql/data]
+        #tmpfs: [/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U barq_app -d barq_tasks"]
       interval: 3s
       timeout: 3s
       retries: 10
     networks: [backend]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M  
   redis:
     image: redis:7.4-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
     container_name: redis
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
-    ports: ["127.0.0.1:16379:6379"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data  
+# ports deleted
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 3s
       timeout: 2s
       retries: 5
     networks: [backend]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M  
   app-01:
     <<: *app
     container_name: app-01
@@ -56,17 +73,23 @@ services:
     container_name: app-02
     environment:
       <<: *app-env
-      INSTANCE_ID: "app-01"
+      INSTANCE_ID: "app-02"
   nginx:
     image: nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
     container_name: nginx
     ports: ["127.0.0.1:${PUBLIC_PORT:-8080}:80"]
     volumes: ["./nginx/nginx.conf:/etc/nginx/nginx.conf:ro"]
     depends_on: [app-01, app-02]
-    networks: [frontend, backend]
+    networks: [frontend]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M  
 networks:
   frontend:
   backend:
     internal: true
 volumes:
   postgres-data:
+  redis-data:  
